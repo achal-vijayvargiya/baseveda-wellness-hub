@@ -26,7 +26,7 @@ const Splash = () => {
       
       <div className="relative z-10 text-center space-y-6 animate-in fade-in duration-1000">
         <h1 className="text-6xl md:text-7xl font-bold text-primary tracking-tight">
-          BaseVeda
+          DietVeda
         </h1>
         <p className="text-xl md:text-2xl text-muted-foreground font-light italic">
           Balance begins with awareness
