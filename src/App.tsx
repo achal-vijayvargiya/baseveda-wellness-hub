@@ -6,7 +6,11 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Splash from "./pages/Splash";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
+import NewClient from "./pages/NewClient";
+import EditClient from "./pages/EditClient";
 import ClientDetails from "./pages/ClientDetails";
+import DietPlanView from "./pages/DietPlanView";
+import ComprehensiveHealthProfile from "./pages/ComprehensiveHealthProfile";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -21,7 +25,11 @@ const App = () => (
           <Route path="/" element={<Splash />} />
           <Route path="/login" element={<Login />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/new-client" element={<NewClient />} />
           <Route path="/client/:id" element={<ClientDetails />} />
+          <Route path="/client/:id/edit" element={<EditClient />} />
+          <Route path="/client/:clientId/comprehensive-profile" element={<ComprehensiveHealthProfile />} />
+          <Route path="/diet-plan/:id" element={<DietPlanView />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

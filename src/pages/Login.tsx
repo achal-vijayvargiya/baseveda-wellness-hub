@@ -4,27 +4,38 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { platformAuthApi } from "@/lib/platform-api";
 
 const Login = () => {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate authentication
-    setTimeout(() => {
-      if (email && password) {
-        toast.success("Welcome back!");
-        navigate("/dashboard");
-      } else {
-        toast.error("Please enter your credentials");
-      }
+    try {
+      const response = await platformAuthApi.login(username, password);
+      
+      // Store token
+      localStorage.setItem("auth_token", response.access_token);
+      console.log('[Login] Token stored successfully');
+      console.log('[Login] Token preview:', response.access_token.substring(0, 20) + '...');
+      
+      // Verify token was stored
+      const storedToken = localStorage.getItem("auth_token");
+      console.log('[Login] Verification - Token in localStorage:', !!storedToken);
+      
+      toast.success("Welcome back!");
+      navigate("/dashboard");
+    } catch (error: any) {
+      console.error('[Login] Login error:', error);
+      toast.error(error.message || "Login failed. Please check your credentials.");
+    } finally {
       setIsLoading(false);
-    }, 800);
+    }
   };
 
   return (
@@ -43,13 +54,13 @@ const Login = () => {
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="username">Username</Label>
               <Input
-                id="email"
-                type="email"
-                placeholder="your@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                id="username"
+                type="text"
+                placeholder="Enter your username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 required
                 className="rounded-xl"
               />
