@@ -4,12 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   ArrowLeft,
   Calendar,
   Target,
@@ -24,8 +18,6 @@ import {
   Download,
   Trash2,
   Bot,
-  ChevronDown,
-  ChefHat,
   Activity,
   CheckCircle2,
 } from "lucide-react";
@@ -42,12 +34,6 @@ import {
   type PlatformPlanGenerateRequest,
 } from "@/lib/platform-api";
 import { toast } from "sonner";
-import { NCPProcessFlow } from "@/components/NCPProcessFlow";
-// TODO: Update these components to use Platform APIs
-// import { GenerateDietPlanDialog } from "@/components/GenerateDietPlanDialog";
-// import { GenerateDietPlanAIDialog } from "@/components/GenerateDietPlanAIDialog";
-// import { DietPlanChatInterface } from "@/components/DietPlanChatInterface";
-// import { FoodRetrievalEditor } from "@/components/FoodRetrievalEditor";
 import {
   Sheet,
   SheetContent,
@@ -88,15 +74,7 @@ const ClientDetails = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [dietPlans, setDietPlans] = useState<PlatformPlanResponse[]>([]);
   const [isLoadingPlans, setIsLoadingPlans] = useState(false);
-  const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
-  const [showGenerateDialog, setShowGenerateDialog] = useState(false);
-  const [showAIDialog, setShowAIDialog] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [showFoodRetrievalEditor, setShowFoodRetrievalEditor] = useState(false);
-  const [retrievedFoods, setRetrievedFoods] = useState<any>(null);
-  const [isRetrievingFoods, setIsRetrievingFoods] = useState(false);
-  const [approvedFoodsForPlan, setApprovedFoodsForPlan] = useState<any>(null);
-  const [approvedFiltersForPlan, setApprovedFiltersForPlan] = useState<Record<string, string> | null>(null);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [editFormData, setEditFormData] = useState<PlatformClientUpdate>({});
@@ -180,61 +158,6 @@ const ClientDetails = () => {
     }
   };
 
-  const handleGeneratePlan = async (request: PlatformPlanGenerateRequest) => {
-    try {
-      setIsGeneratingPlan(true);
-      toast.loading("Generating your personalized diet plan...", { id: "generate-plan" });
-      
-      const newPlan = await platformPlanApi.generate(request);
-      
-      toast.success("Diet plan generated successfully!", { id: "generate-plan" });
-      setShowGenerateDialog(false);
-      
-      // Refresh diet plans
-      if (id) {
-        await fetchDietPlans(id);
-      }
-      
-      // Navigate to the new plan
-      navigate(`/diet-plan/${newPlan.id}`);
-    } catch (error: any) {
-      console.error("Failed to generate diet plan:", error);
-      toast.error(error.message || "Failed to generate diet plan", { id: "generate-plan" });
-    } finally {
-      setIsGeneratingPlan(false);
-    }
-  };
-
-  const handleSmartRetrieval = async () => {
-    if (!id) return;
-    
-    // TODO: Smart food retrieval not yet implemented in platform API
-    // For now, show a message that this feature is coming soon
-    toast.info("Smart food retrieval feature is coming soon in the platform API");
-    
-    // Uncomment when platform API implements this:
-    // try {
-    //   setIsRetrievingFoods(true);
-    //   toast.loading("Retrieving foods...", { id: "retrieve-foods" });
-    //   
-    //   // Platform API implementation will go here
-    //   
-    // } catch (error: any) {
-    //   console.error("Failed to retrieve foods:", error);
-    //   toast.error(error.message || "Failed to retrieve foods", { id: "retrieve-foods" });
-    // } finally {
-    //   setIsRetrievingFoods(false);
-    // }
-  };
-
-  const handleFoodsApproved = (foodsByCategory: any) => {
-    // After user approves the food selection, open the AI dialog with these foods preloaded
-    setApprovedFoodsForPlan(foodsByCategory);
-    setApprovedFiltersForPlan(retrievedFoods?.filtersApplied || {});
-    setShowFoodRetrievalEditor(false);
-    setShowAIDialog(true);
-    toast.success("Food selection approved! Proceed to Generate Diet Plan to use these foods.");
-  };
 
   const handleViewPlan = (planId: string) => {
     navigate(`/diet-plan/${planId}`);
@@ -569,38 +492,6 @@ const ClientDetails = () => {
             </div>
 
             <div className="flex flex-col gap-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button className="rounded-xl">
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    Generate Diet Plan
-                    <ChevronDown className="w-4 h-4 ml-2" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuItem onClick={() => handleSmartRetrieval()}>
-                    <ChefHat className="w-4 h-4 mr-2" />
-                    <div className="flex flex-col">
-                      <span className="font-medium">Smart Retrieval</span>
-                      <span className="text-xs text-muted-foreground">Review & edit foods before planning</span>
-                    </div>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setShowAIDialog(true)}>
-                    <Bot className="w-4 h-4 mr-2" />
-                    <div className="flex flex-col">
-                      <span className="font-medium">AI-Powered (Recommended)</span>
-                      <span className="text-xs text-muted-foreground">Smart retrieval + AI meal planning</span>
-                    </div>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setShowGenerateDialog(true)}>
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    <div className="flex flex-col">
-                      <span className="font-medium">Traditional</span>
-                      <span className="text-xs text-muted-foreground">Instant rule-based generation</span>
-                    </div>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
               <Button variant="outline" className="rounded-xl" onClick={handleEditProfile}>
                 Edit Profile
               </Button>
@@ -644,14 +535,9 @@ const ClientDetails = () => {
         </div>
 
         {/* NCP Process Flow Section */}
-        {latestAssessment ? (
-          <NCPProcessFlow
-            assessmentId={latestAssessment.id}
-            clientId={id!}
-          />
-        ) : (
-          <Card className="wellness-card">
-            <CardHeader>
+        <Card className="wellness-card">
+          <CardHeader>
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-xl bg-primary/10">
                   <Activity className="w-6 h-6 text-primary" />
@@ -659,72 +545,30 @@ const ClientDetails = () => {
                 <div className="flex-1">
                   <CardTitle className="text-2xl">NCP Process Flow</CardTitle>
                   <CardDescription className="mt-2">
-                    Start the Nutrition Care Process to begin step-by-step assessment and plan generation
+                    Step-by-step Nutrition Care Process execution
                   </CardDescription>
                 </div>
               </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="p-6 rounded-2xl bg-gradient-to-br from-primary/5 to-accent/5 border border-border/50">
-                  <h4 className="font-semibold text-lg mb-2">What is the NCP Process?</h4>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    The Nutrition Care Process (NCP) is a systematic approach to providing high-quality nutrition care.
-                    It follows these steps:
-                  </p>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-primary" />
-                      <span>1. Intake - Collect client data</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-primary" />
-                      <span>2. Assessment - Comprehensive health evaluation</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-primary" />
-                      <span>3. Diagnosis - Identify nutrition problems</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-primary" />
-                      <span>4. MNT Constraints - Apply medical nutrition therapy rules</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-primary" />
-                      <span>5. Targets - Calculate nutrition targets</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-primary" />
-                      <span>6. Meal Structure - Define meal structure</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-primary" />
-                      <span>7. Exchange Allocation - Allocate exchanges</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-primary" />
-                      <span>8. Ayurveda - Apply lifestyle guidelines</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-primary" />
-                      <span>9. Food Intervention - Apply food interventions</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-primary" />
-                      <span>10. Recipe + Plan Generation - Generate recipes and final plan</span>
-                    </div>
-                  </div>
-                </div>
+              {latestAssessment ? (
+                <Button
+                  onClick={() => navigate(`/client/${id}/ncp-process`)}
+                  size="lg"
+                  className="rounded-xl"
+                >
+                  <Activity className="w-5 h-5 mr-2" />
+                  Open NCP Process
+                </Button>
+              ) : (
                 <Button
                   onClick={handleStartNCPProcess}
                   disabled={isCreatingAssessment}
-                  className="w-full"
                   size="lg"
+                  className="rounded-xl"
                 >
                   {isCreatingAssessment ? (
                     <>
                       <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                      Starting NCP Process...
+                      Starting...
                     </>
                   ) : (
                     <>
@@ -733,10 +577,74 @@ const ClientDetails = () => {
                     </>
                   )}
                 </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="p-6 rounded-2xl bg-gradient-to-br from-primary/5 to-accent/5 border border-border/50">
+                <h4 className="font-semibold text-lg mb-2">What is the NCP Process?</h4>
+                <p className="text-sm text-muted-foreground mb-4">
+                  The Nutrition Care Process (NCP) is a systematic approach to providing high-quality nutrition care.
+                  It follows these steps:
+                </p>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-primary" />
+                    <span>1. Intake - Collect client data</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-primary" />
+                    <span>2. Assessment - Comprehensive health evaluation</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-primary" />
+                    <span>3. Diagnosis - Identify nutrition problems</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-primary" />
+                    <span>4. MNT Constraints - Apply medical nutrition therapy rules</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-primary" />
+                    <span>5. Targets - Calculate nutrition targets</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-primary" />
+                    <span>6. Meal Structure - Define meal structure</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-primary" />
+                    <span>7. Exchange Allocation - Allocate exchanges</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-primary" />
+                    <span>8. Ayurveda - Apply lifestyle guidelines</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-primary" />
+                    <span>9. Food Intervention - Apply food interventions</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-primary" />
+                    <span>10. Food Allocation - Allocate foods to meals</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-primary" />
+                    <span>11. Recipe Generation - Generate recipes for approved meals</span>
+                  </div>
+                </div>
               </div>
-            </CardContent>
-          </Card>
-        )}
+              {latestAssessment && (
+                <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
+                  <p className="text-sm text-muted-foreground">
+                    <strong>Assessment Found:</strong> Click "Open NCP Process" above to view and execute the NCP steps.
+                  </p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Two Column Layout */}
         <div className="grid lg:grid-cols-2 gap-6">
@@ -1391,38 +1299,11 @@ const ClientDetails = () => {
 
         {/* Diet Plans Section */}
         <div className="wellness-card">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-primary/10">
-                <Utensils className="w-5 h-5 text-primary" />
-              </div>
-              <h3 className="text-2xl font-semibold">Diet Plans</h3>
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 rounded-xl bg-primary/10">
+              <Utensils className="w-5 h-5 text-primary" />
             </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button className="rounded-xl">
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  Generate New Plan
-                  <ChevronDown className="w-4 h-4 ml-2" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem onClick={() => setShowAIDialog(true)}>
-                  <Bot className="w-4 h-4 mr-2" />
-                  <div className="flex flex-col">
-                    <span className="font-medium">AI-Powered (Recommended)</span>
-                    <span className="text-xs text-muted-foreground">Smart retrieval + AI meal planning</span>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setShowGenerateDialog(true)}>
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  <div className="flex flex-col">
-                    <span className="font-medium">Traditional</span>
-                    <span className="text-xs text-muted-foreground">Instant rule-based generation</span>
-                  </div>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <h3 className="text-2xl font-semibold">Diet Plans</h3>
           </div>
 
           {isLoadingPlans ? (
@@ -1489,87 +1370,13 @@ const ClientDetails = () => {
                 <Utensils className="w-8 h-8 text-primary" />
               </div>
               <p className="text-muted-foreground mb-4">
-                No diet plans created yet. Generate a personalized plan to get started!
+                No diet plans created yet. Use the NCP Process Flow above to generate a personalized plan.
               </p>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button className="rounded-xl">
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    Generate Your First Plan
-                    <ChevronDown className="w-4 h-4 ml-2" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="center" className="w-56">
-                  <DropdownMenuItem onClick={() => setShowAIDialog(true)}>
-                    <Bot className="w-4 h-4 mr-2" />
-                    <div className="flex flex-col">
-                      <span className="font-medium">AI-Powered (Recommended)</span>
-                      <span className="text-xs text-muted-foreground">Smart retrieval + AI meal planning</span>
-                    </div>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setShowGenerateDialog(true)}>
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    <div className="flex flex-col">
-                      <span className="font-medium">Traditional</span>
-                      <span className="text-xs text-muted-foreground">Instant rule-based generation</span>
-                    </div>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
             </div>
           )}
         </div>
       </main>
 
-      {/* Generate Diet Plan Dialogs */}
-      {client && (
-        <>
-          {/* Smart Food Retrieval Editor */}
-          {/* TODO: Update FoodRetrievalEditor to use Platform APIs and UUID strings */}
-          {/* {retrievedFoods && (
-            <FoodRetrievalEditor
-              open={showFoodRetrievalEditor}
-              onOpenChange={setShowFoodRetrievalEditor}
-              foodsByCategory={retrievedFoods.foodsByCategory}
-              clientId={client.id}
-              filtersApplied={retrievedFoods.filtersApplied}
-              onApprove={handleFoodsApproved}
-            />
-          )} */}
-          
-          {/* Traditional Diet Plan Dialog */}
-          {/* TODO: Update GenerateDietPlanDialog to use Platform APIs */}
-          {/* <GenerateDietPlanDialog
-            open={showGenerateDialog}
-            onOpenChange={setShowGenerateDialog}
-            clientId={id!}
-            clientName={getFullName()}
-            onGenerate={handleGeneratePlan}
-            isGenerating={isGeneratingPlan}
-          /> */}
-          
-          {/* AI-Powered Diet Plan Dialog (with Smart Retrieval integrated) */}
-          {/* TODO: Update GenerateDietPlanAIDialog to use Platform APIs */}
-          {/* <GenerateDietPlanAIDialog
-            open={showAIDialog}
-            onOpenChange={setShowAIDialog}
-            clientId={id!}
-            clientName={getFullName()}
-            healthProfile={healthProfileData}
-            prefilledFoodsByCategory={approvedFoodsForPlan}
-            prefilledFilters={approvedFiltersForPlan}
-            onClearPrefill={() => {
-              setApprovedFoodsForPlan(null);
-              setApprovedFiltersForPlan(null);
-            }}
-            onComplete={() => {
-              if (id) {
-                fetchDietPlans(id);
-              }
-            }}
-          /> */}
-        </>
-      )}
 
       {/* AI Chat Assistant - Floating Button */}
       {client && (

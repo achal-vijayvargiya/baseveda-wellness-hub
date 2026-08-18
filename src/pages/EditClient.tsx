@@ -11,7 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, ArrowRight, Check, Loader2, User, Brain, Activity, X, Stethoscope, Target, Utensils } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Loader2, User, Brain, Activity, X, Stethoscope, Target, Utensils, Upload } from "lucide-react";
 import {
   type Client,
   type HealthProfile,
@@ -99,7 +99,26 @@ function buildAssessmentSnapshot(
   healthProfile: HealthProfile,
   diagnosedConditions: Array<{condition: string, severity: string}>,
   surgeryHistory: Array<{type: string, date?: string, notes?: string}>,
-  bloodReport: {hb?: number, rbc?: number, wbc?: number, platelets?: number, report_file_url?: string, report_date?: string} | null,
+  bloodReport: {
+    // CBC
+    hb?: number, rbc?: number, wbc?: number, platelets?: number,
+    // FBS + HbA1c
+    fbs?: number, hba1c?: number,
+    // Lipid Profile
+    cholesterol?: number, triglycerides?: number, hdl?: number, ldl?: number,
+    // LFT
+    alt?: number, ast?: number, bilirubin?: number, albumin?: number,
+    // KFT
+    creatinine?: number, urea?: number, egfr?: number,
+    // Vitamins
+    vitamin_d?: number, vitamin_b12?: number,
+    // TSH
+    tsh?: number,
+    // Ferritin
+    ferritin?: number,
+    // Metadata
+    report_file_url?: string, report_date?: string
+  } | null,
   waistCircumference?: number,
   foodPreferences: {likes?: string[], dislikes?: string[], favorite_foods?: string[], excluded_ingredients?: string[]},
   dietaryPreferencesList: string[],
@@ -139,10 +158,35 @@ function buildAssessmentSnapshot(
     },
     clinical_data: {
       labs: bloodReport ? {
+        // CBC
         hb: bloodReport.hb,
         rbc: bloodReport.rbc,
         wbc: bloodReport.wbc,
         platelets: bloodReport.platelets,
+        // FBS + HbA1c
+        fbs: bloodReport.fbs,
+        hba1c: bloodReport.hba1c,
+        // Lipid Profile
+        cholesterol: bloodReport.cholesterol,
+        triglycerides: bloodReport.triglycerides,
+        hdl: bloodReport.hdl,
+        ldl: bloodReport.ldl,
+        // LFT
+        alt: bloodReport.alt,
+        ast: bloodReport.ast,
+        bilirubin: bloodReport.bilirubin,
+        albumin: bloodReport.albumin,
+        // KFT
+        creatinine: bloodReport.creatinine,
+        urea: bloodReport.urea,
+        egfr: bloodReport.egfr,
+        // Vitamins
+        vitamin_d: bloodReport.vitamin_d,
+        vitamin_b12: bloodReport.vitamin_b12,
+        // TSH
+        tsh: bloodReport.tsh,
+        // Ferritin
+        ferritin: bloodReport.ferritin,
       } : undefined,
       anthropometry: {
         bmi: bmi,
@@ -1425,12 +1469,46 @@ const MedicalHistoryStep = ({
   setStructuredAllergies: React.Dispatch<React.SetStateAction<string[]>>;
   surgeryHistory: Array<{type: string, date?: string, notes?: string}>;
   setSurgeryHistory: React.Dispatch<React.SetStateAction<Array<{type: string, date?: string, notes?: string}>>>;
-  bloodReport: {hb?: number, rbc?: number, wbc?: number, platelets?: number, report_file_url?: string, report_date?: string} | null;
-  setBloodReport: React.Dispatch<React.SetStateAction<{hb?: number, rbc?: number, wbc?: number, platelets?: number, report_file_url?: string, report_date?: string} | null>>;
+  bloodReport: {
+    // CBC
+    hb?: number, rbc?: number, wbc?: number, platelets?: number,
+    // FBS + HbA1c
+    fbs?: number, hba1c?: number,
+    // Lipid Profile
+    cholesterol?: number, triglycerides?: number, hdl?: number, ldl?: number,
+    // LFT
+    alt?: number, ast?: number, bilirubin?: number, albumin?: number,
+    // KFT
+    creatinine?: number, urea?: number, egfr?: number,
+    // Vitamins
+    vitamin_d?: number, vitamin_b12?: number,
+    // TSH
+    tsh?: number,
+    // Ferritin
+    ferritin?: number,
+    // Metadata
+    report_file_url?: string, report_date?: string
+  } | null;
+  setBloodReport: React.Dispatch<React.SetStateAction<{
+    hb?: number, rbc?: number, wbc?: number, platelets?: number,
+    fbs?: number, hba1c?: number,
+    cholesterol?: number, triglycerides?: number, hdl?: number, ldl?: number,
+    alt?: number, ast?: number, bilirubin?: number, albumin?: number,
+    creatinine?: number, urea?: number, egfr?: number,
+    vitamin_d?: number, vitamin_b12?: number,
+    tsh?: number,
+    ferritin?: number,
+    report_file_url?: string, report_date?: string
+  } | null>>;
   menstruationCycle: {cycle_length?: number, period_length?: number, last_period?: string, irregularities?: string[]} | null;
   setMenstruationCycle: React.Dispatch<React.SetStateAction<{cycle_length?: number, period_length?: number, last_period?: string, irregularities?: string[]} | null>>;
   gender?: string;
 }) => {
+  const [selectedAllergy, setSelectedAllergy] = useState<string>("");
+  const [customAllergyInput, setCustomAllergyInput] = useState<string>("");
+  const [uploadingReport, setUploadingReport] = useState(false);
+  const { toast } = useToast();
+  
   // Medical conditions from MNT rules KB - all available diagnoses
   const medicalConditions = [
     { value: "type_1_diabetes", label: "Type 1 Diabetes" },
@@ -1592,14 +1670,79 @@ const MedicalHistoryStep = ({
       </div>
 
       {/* Allergies */}
-      <div className="space-y-2">
+      <div className="space-y-3">
         <Label>Food Allergies</Label>
-        <Textarea
-          placeholder="Enter allergies separated by commas (e.g., Peanuts, Dairy, Gluten)"
-          value={structuredAllergies.join(", ")}
-          onChange={(e) => setStructuredAllergies(e.target.value.split(",").map(a => a.trim()).filter(a => a))}
-          rows={3}
-        />
+        
+        {/* Selected Allergies Display */}
+        {structuredAllergies.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {structuredAllergies.map((allergy) => (
+              <Badge key={allergy} variant="secondary" className="gap-1 pr-1">
+                {allergy}
+                <button
+                  type="button"
+                  onClick={() => setStructuredAllergies(structuredAllergies.filter(a => a !== allergy))}
+                  className="ml-1 rounded-full hover:bg-secondary-foreground/20 p-0.5"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            ))}
+          </div>
+        )}
+        
+        {/* Dropdown for Common Allergies */}
+        <div className="space-y-2">
+          <Select
+            value={selectedAllergy}
+            onValueChange={(value) => {
+              if (value && !structuredAllergies.includes(value)) {
+                setStructuredAllergies([...structuredAllergies, value]);
+                setSelectedAllergy(""); // Reset select after adding
+              }
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select common allergies (Peanuts, Dairy, Gluten, etc.)" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Peanuts">Peanuts</SelectItem>
+              <SelectItem value="Dairy">Dairy</SelectItem>
+              <SelectItem value="Gluten">Gluten</SelectItem>
+              <SelectItem value="Tree Nuts">Tree Nuts</SelectItem>
+              <SelectItem value="Soy">Soy</SelectItem>
+              <SelectItem value="Egg">Egg</SelectItem>
+              <SelectItem value="Fish">Fish</SelectItem>
+              <SelectItem value="Shellfish">Shellfish</SelectItem>
+              <SelectItem value="Sesame">Sesame</SelectItem>
+              <SelectItem value="Lactose">Lactose</SelectItem>
+              <SelectItem value="Wheat">Wheat</SelectItem>
+              <SelectItem value="Sulfites">Sulfites</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        
+        {/* Custom Allergy Input */}
+        <div className="space-y-2">
+          <Input
+            placeholder="Or enter a custom allergy and press Enter"
+            value={customAllergyInput}
+            onChange={(e) => setCustomAllergyInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                const value = customAllergyInput.trim();
+                if (value && !structuredAllergies.includes(value)) {
+                  setStructuredAllergies([...structuredAllergies, value]);
+                  setCustomAllergyInput(""); // Clear input after adding
+                }
+              }
+            }}
+          />
+          <p className="text-xs text-muted-foreground">
+            Type a custom allergy and press Enter to add it
+          </p>
+        </div>
       </div>
 
       {/* Surgery History */}
@@ -1649,38 +1792,268 @@ const MedicalHistoryStep = ({
 
       {/* Blood Report */}
       <div className="space-y-4 border-t pt-4">
-        <Label>Blood Report (Optional)</Label>
-        <div className="grid grid-cols-2 gap-4">
-          <Input
-            type="number"
-            placeholder="Hemoglobin (Hb)"
-            value={bloodReport?.hb || ""}
-            onChange={(e) => setBloodReport({...bloodReport || {}, hb: parseFloat(e.target.value) || undefined})}
-          />
-          <Input
-            type="number"
-            placeholder="RBC"
-            value={bloodReport?.rbc || ""}
-            onChange={(e) => setBloodReport({...bloodReport || {}, rbc: parseFloat(e.target.value) || undefined})}
-          />
-          <Input
-            type="number"
-            placeholder="WBC"
-            value={bloodReport?.wbc || ""}
-            onChange={(e) => setBloodReport({...bloodReport || {}, wbc: parseFloat(e.target.value) || undefined})}
-          />
-          <Input
-            type="number"
-            placeholder="Platelets"
-            value={bloodReport?.platelets || ""}
-            onChange={(e) => setBloodReport({...bloodReport || {}, platelets: parseFloat(e.target.value) || undefined})}
-          />
+        <div className="flex items-center justify-between">
+          <Label>Blood Report (Optional)</Label>
           <Input
             type="date"
             placeholder="Report Date"
             value={bloodReport?.report_date || ""}
             onChange={(e) => setBloodReport({...bloodReport || {}, report_date: e.target.value || undefined})}
+            className="w-auto"
           />
+        </div>
+        
+        {/* File Upload Section */}
+        <div className="space-y-2">
+          <Label className="text-sm font-semibold">Upload Blood Report</Label>
+          <div className="flex items-center gap-2">
+            <Input
+              type="file"
+              accept=".pdf,.png,.jpg,.jpeg,.tiff,.bmp"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                
+                try {
+                  setUploadingReport(true);
+                  const result = await platformAssessmentApi.extractBloodReport(file);
+                  
+                  if (result.success && result.blood_report) {
+                    // Merge extracted values with existing blood report
+                    setBloodReport({
+                      ...bloodReport || {},
+                      ...result.blood_report,
+                      report_file_url: file.name, // Store filename
+                    });
+                    
+                    toast({
+                      title: "Success",
+                      description: "Blood report values extracted successfully!",
+                    });
+                  }
+                } catch (error: any) {
+                  toast({
+                    title: "Error",
+                    description: error.message || "Failed to extract blood report values",
+                    variant: "destructive",
+                  });
+                } finally {
+                  setUploadingReport(false);
+                  // Reset file input
+                  e.target.value = "";
+                }
+              }}
+              disabled={uploadingReport}
+              className="flex-1"
+            />
+            {uploadingReport && <Loader2 className="h-4 w-4 animate-spin" />}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Upload a PDF or image of your blood report. Values will be automatically extracted using AI.
+          </p>
+        </div>
+        
+        {/* CBC */}
+        <div className="space-y-2">
+          <Label className="text-sm font-semibold">CBC (Complete Blood Count)</Label>
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              type="number"
+              step="0.1"
+              placeholder="Hemoglobin (Hb) g/dL"
+              value={bloodReport?.hb || ""}
+              onChange={(e) => setBloodReport({...bloodReport || {}, hb: parseFloat(e.target.value) || undefined})}
+            />
+            <Input
+              type="number"
+              step="0.1"
+              placeholder="RBC (million/µL)"
+              value={bloodReport?.rbc || ""}
+              onChange={(e) => setBloodReport({...bloodReport || {}, rbc: parseFloat(e.target.value) || undefined})}
+            />
+            <Input
+              type="number"
+              step="0.1"
+              placeholder="WBC (thousand/µL)"
+              value={bloodReport?.wbc || ""}
+              onChange={(e) => setBloodReport({...bloodReport || {}, wbc: parseFloat(e.target.value) || undefined})}
+            />
+            <Input
+              type="number"
+              step="0.1"
+              placeholder="Platelets (thousand/µL)"
+              value={bloodReport?.platelets || ""}
+              onChange={(e) => setBloodReport({...bloodReport || {}, platelets: parseFloat(e.target.value) || undefined})}
+            />
+          </div>
+        </div>
+
+        {/* FBS + HbA1c */}
+        <div className="space-y-2">
+          <Label className="text-sm font-semibold">FBS + HbA1c</Label>
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              type="number"
+              step="0.1"
+              placeholder="FBS (Fasting Blood Sugar) mg/dL"
+              value={bloodReport?.fbs || ""}
+              onChange={(e) => setBloodReport({...bloodReport || {}, fbs: parseFloat(e.target.value) || undefined})}
+            />
+            <Input
+              type="number"
+              step="0.1"
+              placeholder="HbA1c (%)"
+              value={bloodReport?.hba1c || ""}
+              onChange={(e) => setBloodReport({...bloodReport || {}, hba1c: parseFloat(e.target.value) || undefined})}
+            />
+          </div>
+        </div>
+
+        {/* Lipid Profile */}
+        <div className="space-y-2">
+          <Label className="text-sm font-semibold">Lipid Profile</Label>
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              type="number"
+              step="0.1"
+              placeholder="Total Cholesterol (mg/dL)"
+              value={bloodReport?.cholesterol || ""}
+              onChange={(e) => setBloodReport({...bloodReport || {}, cholesterol: parseFloat(e.target.value) || undefined})}
+            />
+            <Input
+              type="number"
+              step="0.1"
+              placeholder="Triglycerides (mg/dL)"
+              value={bloodReport?.triglycerides || ""}
+              onChange={(e) => setBloodReport({...bloodReport || {}, triglycerides: parseFloat(e.target.value) || undefined})}
+            />
+            <Input
+              type="number"
+              step="0.1"
+              placeholder="HDL (mg/dL)"
+              value={bloodReport?.hdl || ""}
+              onChange={(e) => setBloodReport({...bloodReport || {}, hdl: parseFloat(e.target.value) || undefined})}
+            />
+            <Input
+              type="number"
+              step="0.1"
+              placeholder="LDL (mg/dL)"
+              value={bloodReport?.ldl || ""}
+              onChange={(e) => setBloodReport({...bloodReport || {}, ldl: parseFloat(e.target.value) || undefined})}
+            />
+          </div>
+        </div>
+
+        {/* LFT */}
+        <div className="space-y-2">
+          <Label className="text-sm font-semibold">LFT (Liver Function Tests)</Label>
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              type="number"
+              step="0.1"
+              placeholder="ALT (U/L)"
+              value={bloodReport?.alt || ""}
+              onChange={(e) => setBloodReport({...bloodReport || {}, alt: parseFloat(e.target.value) || undefined})}
+            />
+            <Input
+              type="number"
+              step="0.1"
+              placeholder="AST (U/L)"
+              value={bloodReport?.ast || ""}
+              onChange={(e) => setBloodReport({...bloodReport || {}, ast: parseFloat(e.target.value) || undefined})}
+            />
+            <Input
+              type="number"
+              step="0.1"
+              placeholder="Bilirubin (mg/dL)"
+              value={bloodReport?.bilirubin || ""}
+              onChange={(e) => setBloodReport({...bloodReport || {}, bilirubin: parseFloat(e.target.value) || undefined})}
+            />
+            <Input
+              type="number"
+              step="0.1"
+              placeholder="Albumin (g/dL)"
+              value={bloodReport?.albumin || ""}
+              onChange={(e) => setBloodReport({...bloodReport || {}, albumin: parseFloat(e.target.value) || undefined})}
+            />
+          </div>
+        </div>
+
+        {/* KFT */}
+        <div className="space-y-2">
+          <Label className="text-sm font-semibold">KFT (Kidney Function Tests)</Label>
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              type="number"
+              step="0.1"
+              placeholder="Creatinine (mg/dL)"
+              value={bloodReport?.creatinine || ""}
+              onChange={(e) => setBloodReport({...bloodReport || {}, creatinine: parseFloat(e.target.value) || undefined})}
+            />
+            <Input
+              type="number"
+              step="0.1"
+              placeholder="Urea (mg/dL)"
+              value={bloodReport?.urea || ""}
+              onChange={(e) => setBloodReport({...bloodReport || {}, urea: parseFloat(e.target.value) || undefined})}
+            />
+            <Input
+              type="number"
+              step="0.1"
+              placeholder="eGFR (mL/min/1.73m²)"
+              value={bloodReport?.egfr || ""}
+              onChange={(e) => setBloodReport({...bloodReport || {}, egfr: parseFloat(e.target.value) || undefined})}
+            />
+          </div>
+        </div>
+
+        {/* Vitamins */}
+        <div className="space-y-2">
+          <Label className="text-sm font-semibold">Vitamin D + B12</Label>
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              type="number"
+              step="0.1"
+              placeholder="Vitamin D (ng/mL)"
+              value={bloodReport?.vitamin_d || ""}
+              onChange={(e) => setBloodReport({...bloodReport || {}, vitamin_d: parseFloat(e.target.value) || undefined})}
+            />
+            <Input
+              type="number"
+              step="0.1"
+              placeholder="Vitamin B12 (pg/mL)"
+              value={bloodReport?.vitamin_b12 || ""}
+              onChange={(e) => setBloodReport({...bloodReport || {}, vitamin_b12: parseFloat(e.target.value) || undefined})}
+            />
+          </div>
+        </div>
+
+        {/* TSH */}
+        <div className="space-y-2">
+          <Label className="text-sm font-semibold">TSH</Label>
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              type="number"
+              step="0.01"
+              placeholder="TSH (mIU/L)"
+              value={bloodReport?.tsh || ""}
+              onChange={(e) => setBloodReport({...bloodReport || {}, tsh: parseFloat(e.target.value) || undefined})}
+            />
+          </div>
+        </div>
+
+        {/* Ferritin */}
+        <div className="space-y-2">
+          <Label className="text-sm font-semibold">Ferritin</Label>
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              type="number"
+              step="0.1"
+              placeholder="Ferritin (ng/mL)"
+              value={bloodReport?.ferritin || ""}
+              onChange={(e) => setBloodReport({...bloodReport || {}, ferritin: parseFloat(e.target.value) || undefined})}
+            />
+          </div>
         </div>
       </div>
 

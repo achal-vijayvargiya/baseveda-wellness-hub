@@ -444,6 +444,54 @@ export const platformAssessmentApi = {
     });
   },
 
+  extractBloodReport: async (file: File): Promise<{
+    success: boolean;
+    blood_report: {
+      report_date?: string | null;
+      hb?: number | null;
+      rbc?: number | null;
+      wbc?: number | null;
+      platelets?: number | null;
+      fbs?: number | null;
+      hba1c?: number | null;
+      cholesterol?: number | null;
+      triglycerides?: number | null;
+      hdl?: number | null;
+      ldl?: number | null;
+      alt?: number | null;
+      ast?: number | null;
+      bilirubin?: number | null;
+      albumin?: number | null;
+      creatinine?: number | null;
+      urea?: number | null;
+      egfr?: number | null;
+      vitamin_d?: number | null;
+      vitamin_b12?: number | null;
+      tsh?: number | null;
+      ferritin?: number | null;
+    };
+    message: string;
+  }> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    
+    const token = localStorage.getItem("token");
+    const response = await fetch(`${API_BASE_URL}/platform/assessments/extract-blood-report`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || "Failed to extract blood report");
+    }
+
+    return response.json();
+  },
+
   processDiagnosis: async (assessmentId: string): Promise<PlatformDiagnosisResponse> => {
     return fetchWithAuth("/platform/assessments/diagnosis", {
       method: "POST",

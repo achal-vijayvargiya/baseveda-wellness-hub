@@ -37,6 +37,7 @@ import {
 import {
   platformAssessmentApi,
   platformPlanApi,
+  platformClientApi,
   type PlatformNCPStatusResponse,
   type PlatformDiagnosisResponse,
   type PlatformMNTResponse,
@@ -56,6 +57,9 @@ import { toast } from "sonner";
 interface NCPProcessFlowProps {
   assessmentId: string;
   clientId: string;
+  hideOverview?: boolean; // Hide the "All Steps Overview" section at the bottom
+  currentStepIndex?: number; // Controlled current step index
+  onStepChange?: (index: number) => void; // Callback when step changes
 }
 
 interface StepResult {
@@ -161,13 +165,29 @@ const NCP_STEPS = [
   },
 ];
 
-export const NCPProcessFlow = ({ assessmentId, clientId }: NCPProcessFlowProps) => {
+export const NCPProcessFlow = ({ 
+  assessmentId, 
+  clientId, 
+  hideOverview = false,
+  currentStepIndex: controlledStepIndex,
+  onStepChange
+}: NCPProcessFlowProps) => {
   const [status, setStatus] = useState<PlatformNCPStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [executingStep, setExecutingStep] = useState<string | null>(null);
   const [stepResults, setStepResults] = useState<StepResult>({});
   const [expandedResults, setExpandedResults] = useState<Record<string, boolean>>({});
-  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [internalStepIndex, setInternalStepIndex] = useState(0);
+  
+  // Use controlled index if provided, otherwise use internal state
+  const currentStepIndex = controlledStepIndex !== undefined ? controlledStepIndex : internalStepIndex;
+  const setCurrentStepIndex = (index: number) => {
+    if (onStepChange) {
+      onStepChange(index);
+    } else {
+      setInternalStepIndex(index);
+    }
+  };
   const [showTargetsDialog, setShowTargetsDialog] = useState(false);
   const [showMealStructureDialog, setShowMealStructureDialog] = useState(false);
   const [showExchangeSelectionDialog, setShowExchangeSelectionDialog] = useState(false);
@@ -178,6 +198,7 @@ export const NCPProcessFlow = ({ assessmentId, clientId }: NCPProcessFlowProps) 
   const [loadingMealStructure, setLoadingMealStructure] = useState(false);
   const [selectedExchangesPerMeal, setSelectedExchangesPerMeal] = useState<Record<string, Set<string>>>({});
   const [mealApprovals, setMealApprovals] = useState<Record<string, Record<string, boolean>>>({});  // {day_number: {meal_name: is_approved}}
+  const [clientData, setClientData] = useState<any>(null);
   
   // Hardcoded exchange categories from core_food_groups_kb.json
   const exchangeCategories = [
@@ -196,7 +217,11 @@ export const NCPProcessFlow = ({ assessmentId, clientId }: NCPProcessFlowProps) 
 
   useEffect(() => {
     fetchStatus();
-  }, [assessmentId]);
+    // Fetch client data for fallback
+    if (clientId) {
+      platformClientApi.getById(clientId).then(setClientData).catch(console.error);
+    }
+  }, [assessmentId, clientId]);
 
   // Fetch meal structure when exchange selection dialog opens
   useEffect(() => {
@@ -230,9 +255,11 @@ export const NCPProcessFlow = ({ assessmentId, clientId }: NCPProcessFlowProps) 
       const statusData = await platformAssessmentApi.getNCPStatus(assessmentId);
       setStatus(statusData);
       
-      // Set current step index based on current_step
-      const stepIndex = NCP_STEPS.findIndex((s) => s.id === statusData.current_step);
-      setCurrentStepIndex(stepIndex >= 0 ? stepIndex : 0);
+      // Set current step index based on current_step (only if not controlled)
+      if (controlledStepIndex === undefined) {
+        const stepIndex = NCP_STEPS.findIndex((s) => s.id === statusData.current_step);
+        setCurrentStepIndex(stepIndex >= 0 ? stepIndex : 0);
+      }
 
       // Fetch results for completed steps
       await fetchCompletedStepResults(statusData);
@@ -646,110 +673,110 @@ export const NCPProcessFlow = ({ assessmentId, clientId }: NCPProcessFlowProps) 
 
     const resultContent = (
       <div className="space-y-4 pt-2">
-              {stepId === "assessment" && result.assessment && (
+              {stepId === "assessment" && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <Card className="p-4">
                       <p className="text-sm text-muted-foreground mb-1">Assessment Status</p>
                       <p className="text-lg font-semibold capitalize">
-                        {result.assessment.assessment_status || "Draft"}
+                        {(result as PlatformAssessmentResponse).assessment_status || "Draft"}
                       </p>
                     </Card>
                     <Card className="p-4">
                       <p className="text-sm text-muted-foreground mb-1">Created At</p>
                       <p className="text-sm font-medium">
-                        {new Date(result.assessment.created_at).toLocaleDateString()}
+                        {new Date((result as PlatformAssessmentResponse).created_at).toLocaleDateString()}
                       </p>
                     </Card>
                   </div>
-                  {result.assessment.assessment_snapshot && 
-                   Object.keys(result.assessment.assessment_snapshot).length > 0 && (
+                  {(result as PlatformAssessmentResponse).assessment_snapshot && 
+                   Object.keys((result as PlatformAssessmentResponse).assessment_snapshot).length > 0 && (
                     <div>
                       <h4 className="font-semibold mb-2">Assessment Snapshot</h4>
                       <Card className="p-4">
                         <div className="space-y-4">
                           {/* Client Context */}
-                          {result.assessment.assessment_snapshot.client_context && (
+                          {(result as PlatformAssessmentResponse).assessment_snapshot.client_context && (
                             <div>
                               <h5 className="font-medium mb-2 text-sm">Client Context</h5>
                               <div className="bg-muted/50 p-3 rounded-lg">
                                 <pre className="text-xs overflow-auto">
-                                  {JSON.stringify(result.assessment.assessment_snapshot.client_context, null, 2)}
+                                  {JSON.stringify((result as PlatformAssessmentResponse).assessment_snapshot.client_context, null, 2)}
                                 </pre>
                               </div>
                             </div>
                           )}
                           
                           {/* Clinical Data */}
-                          {result.assessment.assessment_snapshot.clinical_data && (
+                          {(result as PlatformAssessmentResponse).assessment_snapshot.clinical_data && (
                             <div>
                               <h5 className="font-medium mb-2 text-sm">Clinical Data</h5>
                               <div className="bg-muted/50 p-3 rounded-lg">
                                 <pre className="text-xs overflow-auto">
-                                  {JSON.stringify(result.assessment.assessment_snapshot.clinical_data, null, 2)}
+                                  {JSON.stringify((result as PlatformAssessmentResponse).assessment_snapshot.clinical_data, null, 2)}
                                 </pre>
                               </div>
                             </div>
                           )}
                           
                           {/* Lifestyle Data */}
-                          {result.assessment.assessment_snapshot.lifestyle_data && (
+                          {(result as PlatformAssessmentResponse).assessment_snapshot.lifestyle_data && (
                             <div>
                               <h5 className="font-medium mb-2 text-sm">Lifestyle Data</h5>
                               <div className="bg-muted/50 p-3 rounded-lg">
                                 <pre className="text-xs overflow-auto">
-                                  {JSON.stringify(result.assessment.assessment_snapshot.lifestyle_data, null, 2)}
+                                  {JSON.stringify((result as PlatformAssessmentResponse).assessment_snapshot.lifestyle_data, null, 2)}
                                 </pre>
                               </div>
                             </div>
                           )}
                           
                           {/* Diet Data */}
-                          {result.assessment.assessment_snapshot.diet_data && (
+                          {(result as PlatformAssessmentResponse).assessment_snapshot.diet_data && (
                             <div>
                               <h5 className="font-medium mb-2 text-sm">Diet Data</h5>
                               <div className="bg-muted/50 p-3 rounded-lg">
                                 <pre className="text-xs overflow-auto">
-                                  {JSON.stringify(result.assessment.assessment_snapshot.diet_data, null, 2)}
+                                  {JSON.stringify((result as PlatformAssessmentResponse).assessment_snapshot.diet_data, null, 2)}
                                 </pre>
                               </div>
                             </div>
                           )}
                           
                           {/* Goals */}
-                          {result.assessment.assessment_snapshot.goals && (
+                          {(result as PlatformAssessmentResponse).assessment_snapshot.goals && (
                             <div>
                               <h5 className="font-medium mb-2 text-sm">Goals</h5>
                               <div className="bg-muted/50 p-3 rounded-lg">
                                 <pre className="text-xs overflow-auto">
-                                  {JSON.stringify(result.assessment.assessment_snapshot.goals, null, 2)}
+                                  {JSON.stringify((result as PlatformAssessmentResponse).assessment_snapshot.goals, null, 2)}
                                 </pre>
                               </div>
                             </div>
                           )}
                           
                           {/* Ayurveda Data */}
-                          {result.assessment.assessment_snapshot.ayurveda_data && (
+                          {(result as PlatformAssessmentResponse).assessment_snapshot.ayurveda_data && (
                             <div>
                               <h5 className="font-medium mb-2 text-sm">Ayurveda Data</h5>
                               <div className="bg-muted/50 p-3 rounded-lg">
                                 <pre className="text-xs overflow-auto">
-                                  {JSON.stringify(result.assessment.assessment_snapshot.ayurveda_data, null, 2)}
+                                  {JSON.stringify((result as PlatformAssessmentResponse).assessment_snapshot.ayurveda_data, null, 2)}
                                 </pre>
                               </div>
                             </div>
                           )}
                           
                           {/* Full Snapshot (if other sections don't exist) */}
-                          {!result.assessment.assessment_snapshot.client_context &&
-                           !result.assessment.assessment_snapshot.clinical_data &&
-                           !result.assessment.assessment_snapshot.lifestyle_data &&
-                           !result.assessment.assessment_snapshot.diet_data &&
-                           !result.assessment.assessment_snapshot.goals &&
-                           !result.assessment.assessment_snapshot.ayurveda_data && (
+                          {!(result as PlatformAssessmentResponse).assessment_snapshot.client_context &&
+                           !(result as PlatformAssessmentResponse).assessment_snapshot.clinical_data &&
+                           !(result as PlatformAssessmentResponse).assessment_snapshot.lifestyle_data &&
+                           !(result as PlatformAssessmentResponse).assessment_snapshot.diet_data &&
+                           !(result as PlatformAssessmentResponse).assessment_snapshot.goals &&
+                           !(result as PlatformAssessmentResponse).assessment_snapshot.ayurveda_data && (
                             <div className="bg-muted/50 p-3 rounded-lg">
                               <pre className="text-xs overflow-auto">
-                                {JSON.stringify(result.assessment.assessment_snapshot, null, 2)}
+                                {JSON.stringify((result as PlatformAssessmentResponse).assessment_snapshot, null, 2)}
                               </pre>
                             </div>
                           )}
@@ -757,8 +784,8 @@ export const NCPProcessFlow = ({ assessmentId, clientId }: NCPProcessFlowProps) 
                       </Card>
                     </div>
                   )}
-                  {(!result.assessment.assessment_snapshot || 
-                    Object.keys(result.assessment.assessment_snapshot).length === 0) && (
+                  {(!(result as PlatformAssessmentResponse).assessment_snapshot || 
+                    Object.keys((result as PlatformAssessmentResponse).assessment_snapshot).length === 0) && (
                     <div className="p-4 bg-muted/50 rounded-lg text-center">
                       <p className="text-sm text-muted-foreground">
                         Assessment snapshot is empty. Assessment data will be populated as you progress through the NCP steps.
@@ -768,13 +795,13 @@ export const NCPProcessFlow = ({ assessmentId, clientId }: NCPProcessFlowProps) 
                 </div>
               )}
 
-              {stepId === "diagnosis" && result.diagnosis && (
+              {stepId === "diagnosis" && (
                 <div className="space-y-4">
-                  {result.diagnosis.medical_conditions?.length > 0 && (
+                  {((result as any).medical_conditions?.length ?? 0) > 0 && (
                     <div>
                       <h4 className="font-semibold mb-2">Medical Conditions</h4>
                       <div className="space-y-2">
-                        {result.diagnosis.medical_conditions.map((condition: any, idx: number) => (
+                        {(result as any).medical_conditions.map((condition: any, idx: number) => (
                           <Card key={idx} className="p-3">
                             <div className="flex justify-between items-start">
                               <div>
@@ -791,11 +818,12 @@ export const NCPProcessFlow = ({ assessmentId, clientId }: NCPProcessFlowProps) 
                       </div>
                     </div>
                   )}
-                  {result.diagnosis.nutrition_diagnoses?.length > 0 && (
+
+                  {((result as any).nutrition_diagnoses?.length ?? 0) > 0 && (
                     <div>
                       <h4 className="font-semibold mb-2">Nutrition Diagnoses</h4>
                       <div className="space-y-2">
-                        {result.diagnosis.nutrition_diagnoses.map((diagnosis: any, idx: number) => (
+                        {(result as any).nutrition_diagnoses.map((diagnosis: any, idx: number) => (
                           <Card key={idx} className="p-3">
                             <div className="flex justify-between items-start">
                               <div>
@@ -812,16 +840,25 @@ export const NCPProcessFlow = ({ assessmentId, clientId }: NCPProcessFlowProps) 
                       </div>
                     </div>
                   )}
+
+                  {(((result as any).medical_conditions?.length ?? 0) === 0) &&
+                    (((result as any).nutrition_diagnoses?.length ?? 0) === 0) && (
+                      <div className="p-4 bg-muted/50 rounded-lg text-center">
+                        <p className="text-sm text-muted-foreground">
+                          Diagnosis ran successfully, but no conditions or nutrition diagnoses were found.
+                        </p>
+                      </div>
+                    )}
                 </div>
               )}
 
-              {stepId === "mnt" && result.mnt && (
+              {stepId === "mnt" && (
                 <div className="space-y-4">
                   <div>
                     <h4 className="font-semibold mb-2">Macro Constraints</h4>
                     <Card className="p-3">
                       <pre className="text-sm overflow-auto">
-                        {JSON.stringify(result.mnt.macro_constraints, null, 2)}
+                        {JSON.stringify((result as PlatformMNTResponse).macro_constraints, null, 2)}
                       </pre>
                     </Card>
                   </div>
@@ -829,15 +866,15 @@ export const NCPProcessFlow = ({ assessmentId, clientId }: NCPProcessFlowProps) 
                     <h4 className="font-semibold mb-2">Micro Constraints</h4>
                     <Card className="p-3">
                       <pre className="text-sm overflow-auto">
-                        {JSON.stringify(result.mnt.micro_constraints, null, 2)}
+                        {JSON.stringify((result as PlatformMNTResponse).micro_constraints, null, 2)}
                       </pre>
                     </Card>
                   </div>
-                  {result.mnt.food_exclusions?.length > 0 && (
+                  {(result as PlatformMNTResponse).food_exclusions?.length > 0 && (
                     <div>
                       <h4 className="font-semibold mb-2">Food Exclusions</h4>
                       <div className="flex flex-wrap gap-2">
-                        {result.mnt.food_exclusions.map((food: string, idx: number) => (
+                        {(result as PlatformMNTResponse).food_exclusions.map((food: string, idx: number) => (
                           <Badge key={idx} variant="secondary">
                             {food}
                           </Badge>
@@ -864,13 +901,13 @@ export const NCPProcessFlow = ({ assessmentId, clientId }: NCPProcessFlowProps) 
                 </div>
               )}
 
-              {stepId === "exchange_allocation" && result.exchange_allocation && (
+              {stepId === "exchange_allocation" && (
                 <div className="space-y-4">
                   <div>
                     <h4 className="font-semibold mb-2">Exchanges Per Meal</h4>
                     <Card className="p-3">
                       <div className="space-y-3">
-                        {Object.entries(result.exchange_allocation.exchanges_per_meal || {}).map(([meal, exchanges]) => (
+                        {Object.entries((result as PlatformExchangeAllocationResponse).exchanges_per_meal || {}).map(([meal, exchanges]) => (
                           <div key={meal}>
                             <p className="font-medium capitalize mb-2">{meal}</p>
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
@@ -886,12 +923,12 @@ export const NCPProcessFlow = ({ assessmentId, clientId }: NCPProcessFlowProps) 
                       </div>
                     </Card>
                   </div>
-                  {result.exchange_allocation.notes && Object.keys(result.exchange_allocation.notes).length > 0 && (
+                  {(result as PlatformExchangeAllocationResponse).notes && Object.keys((result as PlatformExchangeAllocationResponse).notes).length > 0 && (
                     <div>
                       <h4 className="font-semibold mb-2">Notes</h4>
                       <Card className="p-3">
                         <pre className="text-sm overflow-auto">
-                          {JSON.stringify(result.exchange_allocation.notes, null, 2)}
+                          {JSON.stringify((result as PlatformExchangeAllocationResponse).notes, null, 2)}
                         </pre>
                       </Card>
                     </div>
@@ -899,30 +936,30 @@ export const NCPProcessFlow = ({ assessmentId, clientId }: NCPProcessFlowProps) 
                 </div>
               )}
 
-              {stepId === "ayurveda" && result.ayurveda && (
+              {stepId === "ayurveda" && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
-                    {result.ayurveda.dosha_primary && (
+                    {(result as PlatformAyurvedaResponse).dosha_primary && (
                       <Card className="p-4">
                         <p className="text-sm text-muted-foreground mb-1">Primary Dosha</p>
-                        <p className="text-xl font-bold capitalize">{result.ayurveda.dosha_primary}</p>
+                        <p className="text-xl font-bold capitalize">{(result as PlatformAyurvedaResponse).dosha_primary}</p>
                       </Card>
                     )}
-                    {result.ayurveda.dosha_secondary && (
+                    {(result as PlatformAyurvedaResponse).dosha_secondary && (
                       <Card className="p-4">
                         <p className="text-sm text-muted-foreground mb-1">Secondary Dosha</p>
                         <p className="text-xl font-bold capitalize">
-                          {result.ayurveda.dosha_secondary}
+                          {(result as PlatformAyurvedaResponse).dosha_secondary}
                         </p>
                       </Card>
                     )}
                   </div>
-                  {result.ayurveda.lifestyle_guidelines && (
+                  {(result as PlatformAyurvedaResponse).lifestyle_guidelines && (
                     <div>
                       <h4 className="font-semibold mb-2">Lifestyle Guidelines</h4>
                       <Card className="p-3">
                         <pre className="text-sm overflow-auto">
-                          {JSON.stringify(result.ayurveda.lifestyle_guidelines, null, 2)}
+                          {JSON.stringify((result as PlatformAyurvedaResponse).lifestyle_guidelines, null, 2)}
                         </pre>
                       </Card>
                     </div>
@@ -930,38 +967,38 @@ export const NCPProcessFlow = ({ assessmentId, clientId }: NCPProcessFlowProps) 
                 </div>
               )}
 
-              {stepId === "intervention" && result.intervention && (
+              {stepId === "intervention" && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <Card className="p-4">
                       <p className="text-sm text-muted-foreground mb-1">Plan ID</p>
                       <p className="text-xs font-mono truncate">
-                        {result.intervention.plan_id || "N/A"}
+                        {(result as PlatformInterventionResponse).plan_id || "N/A"}
                       </p>
                     </Card>
                     <Card className="p-4">
                       <p className="text-sm text-muted-foreground mb-1">Plan Version</p>
                       <p className="text-lg font-semibold">
-                        {result.intervention.plan_version || "1"}
+                        {(result as PlatformInterventionResponse).plan_version || "1"}
                       </p>
                     </Card>
                   </div>
-                  {result.intervention.meal_plan && (
+                  {(result as PlatformInterventionResponse).meal_plan && (
                     <div>
                       <h4 className="font-semibold mb-2">Meal Plan</h4>
                       <Card className="p-3">
                         <pre className="text-sm overflow-auto max-h-96">
-                          {JSON.stringify(result.intervention.meal_plan, null, 2)}
+                          {JSON.stringify((result as PlatformInterventionResponse).meal_plan, null, 2)}
                         </pre>
                       </Card>
                     </div>
                   )}
-                  {result.intervention.explanations && (
+                  {(result as PlatformInterventionResponse).explanations && (
                     <div>
                       <h4 className="font-semibold mb-2">Explanations</h4>
                       <Card className="p-3">
                         <pre className="text-sm overflow-auto max-h-96">
-                          {JSON.stringify(result.intervention.explanations, null, 2)}
+                          {JSON.stringify((result as PlatformInterventionResponse).explanations, null, 2)}
                         </pre>
                       </Card>
                     </div>
@@ -1058,65 +1095,65 @@ export const NCPProcessFlow = ({ assessmentId, clientId }: NCPProcessFlowProps) 
                 </div>
               )}
 
-              {stepId === "plan" && result.plan && (
+              {stepId === "plan" && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <Card className="p-4">
                       <p className="text-sm text-muted-foreground mb-1">Plan Status</p>
                       <p className="text-lg font-semibold capitalize">
-                        {result.plan.status || "Draft"}
+                        {(result as PlatformPlanResponse).status || "Draft"}
                       </p>
                     </Card>
                     <Card className="p-4">
                       <p className="text-sm text-muted-foreground mb-1">Plan Version</p>
                       <p className="text-lg font-semibold">
-                        {result.plan.plan_version || "1"}
+                        {(result as PlatformPlanResponse).plan_version || "1"}
                       </p>
                     </Card>
                     <Card className="p-4">
                       <p className="text-sm text-muted-foreground mb-1">Created At</p>
                       <p className="text-sm font-medium">
-                        {new Date(result.plan.created_at).toLocaleDateString()}
+                        {new Date((result as PlatformPlanResponse).created_at).toLocaleDateString()}
                       </p>
                     </Card>
                     <Card className="p-4">
                       <p className="text-sm text-muted-foreground mb-1">Plan ID</p>
                       <p className="text-xs font-mono truncate">
-                        {result.plan.id}
+                        {(result as PlatformPlanResponse).id}
                       </p>
                     </Card>
                   </div>
-                  {result.plan.meal_plan && (
+                  {(result as PlatformPlanResponse).meal_plan && (
                     <div>
                       <h4 className="font-semibold mb-2">Meal Plan</h4>
                       <Card className="p-3">
                         <pre className="text-sm overflow-auto max-h-96">
-                          {JSON.stringify(result.plan.meal_plan, null, 2)}
+                          {JSON.stringify((result as PlatformPlanResponse).meal_plan, null, 2)}
                         </pre>
                       </Card>
                     </div>
                   )}
-                  {result.plan.explanations && (
+                  {(result as PlatformPlanResponse).explanations && (
                     <div>
                       <h4 className="font-semibold mb-2">Explanations</h4>
                       <Card className="p-3">
                         <pre className="text-sm overflow-auto max-h-96">
-                          {JSON.stringify(result.plan.explanations, null, 2)}
+                          {JSON.stringify((result as PlatformPlanResponse).explanations, null, 2)}
                         </pre>
                       </Card>
                     </div>
                   )}
-                  {result.plan.constraints_snapshot && (
+                  {(result as PlatformPlanResponse).constraints_snapshot && (
                     <div>
                       <h4 className="font-semibold mb-2">Constraints Snapshot</h4>
                       <Card className="p-3">
                         <pre className="text-sm overflow-auto max-h-96">
-                          {JSON.stringify(result.plan.constraints_snapshot, null, 2)}
+                          {JSON.stringify((result as PlatformPlanResponse).constraints_snapshot, null, 2)}
                         </pre>
                       </Card>
                     </div>
                   )}
-                  {!result.plan.meal_plan && !result.plan.explanations && !result.plan.constraints_snapshot && (
+                  {!(result as PlatformPlanResponse).meal_plan && !(result as PlatformPlanResponse).explanations && !(result as PlatformPlanResponse).constraints_snapshot && (
                     <div className="p-4 bg-muted/50 rounded-lg text-center">
                       <p className="text-sm text-muted-foreground">
                         Plan data is being generated. Please refresh to see the complete plan.
@@ -1161,12 +1198,7 @@ export const NCPProcessFlow = ({ assessmentId, clientId }: NCPProcessFlowProps) 
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => {
-                      console.log("Button clicked - result:", result);
-                      console.log("result.intervention:", (result as any).intervention);
-                      console.log("meal_plan:", (result as any).intervention?.meal_plan);
-                      setShowInterventionFoodsDialog(true);
-                    }}
+                    onClick={() => setShowInterventionFoodsDialog(true)}
                   >
                     <Table className="w-4 h-4 mr-2" />
                     View Table
@@ -1406,55 +1438,57 @@ export const NCPProcessFlow = ({ assessmentId, clientId }: NCPProcessFlowProps) 
         </div>
 
         {/* All Steps Overview */}
-        <div className="pt-6 border-t">
-          <h3 className="font-semibold mb-4">All Steps Overview</h3>
-          <div className="grid md:grid-cols-2 gap-3">
-            {NCP_STEPS.map((step, idx) => {
-              const completed = isStepCompleted(step.id);
-              const active = isStepActive(step.id);
-              const Icon = step.icon || Circle;
+        {!hideOverview && (
+          <div className="pt-6 border-t">
+            <h3 className="font-semibold mb-4">All Steps Overview</h3>
+            <div className="grid md:grid-cols-2 gap-3">
+              {NCP_STEPS.map((step, idx) => {
+                const completed = isStepCompleted(step.id);
+                const active = isStepActive(step.id);
+                const Icon = step.icon || Circle;
 
-              return (
-                <Card
-                  key={step.id}
-                  className={`cursor-pointer transition-all ${
-                    idx === currentStepIndex ? "border-primary border-2" : ""
-                  }`}
-                  onClick={() => setCurrentStepIndex(idx)}
-                >
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`p-2 rounded-lg ${
-                            completed ? "bg-primary/10" : "bg-muted"
-                          }`}
-                        >
-                          <Icon
-                            className={`w-4 h-4 ${
-                              completed ? "text-primary" : "text-muted-foreground"
+                return (
+                  <Card
+                    key={step.id}
+                    className={`cursor-pointer transition-all ${
+                      idx === currentStepIndex ? "border-primary border-2" : ""
+                    }`}
+                    onClick={() => setCurrentStepIndex(idx)}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`p-2 rounded-lg ${
+                              completed ? "bg-primary/10" : "bg-muted"
                             }`}
-                          />
+                          >
+                            <Icon
+                              className={`w-4 h-4 ${
+                                completed ? "text-primary" : "text-muted-foreground"
+                              }`}
+                            />
+                          </div>
+                          <div>
+                            <p className="font-medium text-sm">{step.name}</p>
+                            <p className="text-xs text-muted-foreground">{step.description}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-medium text-sm">{step.name}</p>
-                          <p className="text-xs text-muted-foreground">{step.description}</p>
-                        </div>
+                        {completed ? (
+                          <CheckCircle2 className="w-5 h-5 text-primary" />
+                        ) : active ? (
+                          <Circle className="w-5 h-5 text-primary" />
+                        ) : (
+                          <Circle className="w-5 h-5 text-muted-foreground" />
+                        )}
                       </div>
-                      {completed ? (
-                        <CheckCircle2 className="w-5 h-5 text-primary" />
-                      ) : active ? (
-                        <Circle className="w-5 h-5 text-primary" />
-                      ) : (
-                        <Circle className="w-5 h-5 text-muted-foreground" />
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
       </CardContent>
     </Card>
     {/* Targets Table Dialog */}
@@ -1477,6 +1511,96 @@ export const NCPProcessFlow = ({ assessmentId, clientId }: NCPProcessFlowProps) 
               </h3>
               <Card>
                 <CardContent className="p-4">
+                  {/* Client Information */}
+                  {(() => {
+                    const snapshot = stepResults.assessment?.assessment_snapshot;
+                    const height = snapshot?.client_context?.height_cm || clientData?.height_cm;
+                    const weight = snapshot?.client_context?.weight_kg || clientData?.weight_kg;
+                    const bmi = snapshot?.clinical_data?.anthropometry?.bmi;
+                    const goals = snapshot?.goals;
+                    const hasAnyData = height || weight || bmi || goals;
+                    
+                    if (!hasAnyData) return null;
+                    
+                    // Calculate BMI if not available but height and weight are
+                    let calculatedBMI: number | null = null;
+                    if (!bmi && height && weight) {
+                      const heightInMeters = height / 100;
+                      calculatedBMI = weight / (heightInMeters * heightInMeters);
+                    }
+                    const displayBMI = bmi || calculatedBMI;
+                    
+                    return (
+                      <div className="mb-6 pb-6 border-b">
+                        <h4 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wide">Client Information</h4>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          {/* Height */}
+                          {height && (
+                            <div>
+                              <p className="text-xs text-muted-foreground mb-1">Height</p>
+                              <p className="text-lg font-semibold">
+                                {height} cm
+                              </p>
+                            </div>
+                          )}
+                          
+                          {/* Weight */}
+                          {weight && (
+                            <div>
+                              <p className="text-xs text-muted-foreground mb-1">Weight</p>
+                              <p className="text-lg font-semibold">
+                                {weight} kg
+                              </p>
+                            </div>
+                          )}
+                          
+                          {/* BMI */}
+                          {displayBMI && (
+                            <div>
+                              <p className="text-xs text-muted-foreground mb-1">BMI</p>
+                              <p className="text-lg font-semibold">
+                                {typeof displayBMI === 'number'
+                                  ? displayBMI.toFixed(1)
+                                  : displayBMI}
+                              </p>
+                            </div>
+                          )}
+                          
+                          {/* Goals */}
+                          {goals && (
+                            <div>
+                              <p className="text-xs text-muted-foreground mb-1">Primary Goal</p>
+                              <p className="text-lg font-semibold capitalize line-clamp-2">
+                                {goals.primary_goal || 
+                                 (Array.isArray(goals.secondary_goals) && 
+                                  goals.secondary_goals.length > 0
+                                  ? goals.secondary_goals[0]
+                                  : "N/A")}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Secondary Goals if available */}
+                        {goals?.secondary_goals && 
+                         Array.isArray(goals.secondary_goals) &&
+                         goals.secondary_goals.length > 0 && (
+                          <div className="mt-3 pt-3 border-t">
+                            <p className="text-xs text-muted-foreground mb-1">Secondary Goals</p>
+                            <div className="flex flex-wrap gap-2">
+                              {goals.secondary_goals.map((goal: string, idx: number) => (
+                                <Badge key={idx} variant="secondary" className="text-xs">
+                                  {goal}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                  
+                  {/* Calories Target */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm text-muted-foreground mb-1">Daily Calories</p>
@@ -2211,10 +2335,8 @@ export const NCPProcessFlow = ({ assessmentId, clientId }: NCPProcessFlowProps) 
           </DialogHeader>
           <div className="space-y-6">
             {(() => {
-              const interventionData = (stepResults.intervention as any).intervention || stepResults.intervention;
+              const interventionData = stepResults.intervention;
               const categoryWiseFoods = interventionData?.meal_plan?.category_wise_foods || {};
-              console.log("Dialog - interventionData:", interventionData);
-              console.log("Dialog - categoryWiseFoods:", categoryWiseFoods);
               return Object.entries(categoryWiseFoods).map(
                 ([exchangeCategory, foods]: [string, any]) => (
                   <div key={exchangeCategory} className="space-y-2">
@@ -2270,7 +2392,7 @@ export const NCPProcessFlow = ({ assessmentId, clientId }: NCPProcessFlowProps) 
               );
             })()}
             {(() => {
-              const interventionData = (stepResults.intervention as any).intervention || stepResults.intervention;
+              const interventionData = stepResults.intervention;
               const categoryWiseFoods = interventionData?.meal_plan?.category_wise_foods || {};
               return Object.keys(categoryWiseFoods).length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
